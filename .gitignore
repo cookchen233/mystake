@@ -1,0 +1,7 @@
+.idea
+composer.lock
+*.log
+.env
+.svn
+.vscode
+node_modules

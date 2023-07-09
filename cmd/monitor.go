@@ -10,11 +10,8 @@ import (
 	"github.com/hegedustibor/htgo-tts/voices"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 	. "mystake/lib"
 	"mystake/market"
-	"os"
 	"regexp"
 	"time"
 )
@@ -150,20 +147,7 @@ func getCodes() ([]string, error) {
 	//	}
 	//}()
 	//rows, err := f.GetRows("Sheet1")
-	// 读取原始文件内容
-	inputData, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	// 转换为UTF-8编码
-	outputData, _, err := transform.Bytes(simplifiedchinese.GB18030.NewDecoder(), inputData)
-	if err != nil {
-		return nil, err
-	}
-	err = os.WriteFile(filename, outputData, 0644)
-	if err != nil {
-		return nil, err
-	}
+	CovertToUTF8(filename)
 	lines, err := ReadLines(filename)
 	if err != nil {
 		return nil, err

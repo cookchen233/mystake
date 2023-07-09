@@ -11,6 +11,8 @@ import (
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"github.com/xuri/excelize/v2"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 	"gopkg.in/gomail.v2"
 	"io"
 	"math"
@@ -26,6 +28,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 )
 
 func Copy(src, dst string) (int64, error) {
@@ -662,16 +665,38 @@ func ReadLines(filePath string) ([]string, error) {
 	return lines, nil
 }
 
-// isWeekday 判断给定时间是否为工作日（周一至周五）
+// IsWeekday 判断给定时间是否为工作日（周一至周五）
 func IsWeekday(t time.Time) bool {
 	return t.Weekday() >= time.Monday && t.Weekday() <= time.Friday
 }
 
-// isInTimeRange 判断给定时间是否在指定的时间范围内
+// IsInTimeRange 判断给定时间是否在指定的时间范围内
 func IsInTimeRange(t time.Time, start, end string) bool {
 	layout := "15:04"
 	startTime, _ := time.Parse(layout, start)
 	endTime, _ := time.Parse(layout, end)
 
 	return t.After(startTime) && t.Before(endTime)
+}
+
+// CovertToUTF8 转换文件为utf8编码(若检查为非utf8编码)
+func CovertToUTF8(filename string) error {
+	// 读取原始文件内容
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	if utf8.Valid(content) {
+		return nil
+	}
+	// 转换为UTF-8编码
+	new_content, _, err := transform.Bytes(simplifiedchinese.GB18030.NewDecoder(), content)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(filename, new_content, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
 }
