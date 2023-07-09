@@ -64,7 +64,7 @@ TryRequest:
 
 	if err != nil {
 		if strings.Contains(err.Error(), "timeout") && TryRequestTimes < 3 {
-			log.Info("Timeout and try again")
+			log.Warnf("Timeout and try again")
 			goto TryRequest
 		}
 		log.Errorf("request error, url: %s, msg: %s, body:", url, err, resp.RawBody())
