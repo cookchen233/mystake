@@ -5,54 +5,51 @@ package cmd
 
 import (
 	"fmt"
-	htgotts "github.com/hegedustibor/htgo-tts"
-	"github.com/hegedustibor/htgo-tts/handlers"
-	"github.com/hegedustibor/htgo-tts/voices"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"math"
 	. "mystake/lib"
 	"mystake/market"
+	"os/exec"
 	"regexp"
 	"time"
 )
 
 // monitorCmd represents the monitor command
 var monitorCmd = &cobra.Command{
-	Use:   "monitor up",
+	Use:   "monitor up|down|notify",
 	Short: "monitor the deviation from the stocks",
 	Long: `For example:
 monitor up -i true -f /Users/Yy/Desktop/Table.txt -u 3 -d -5`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		action := args[0]
 		for {
-			is_openning_time := IsInTimeRange(time.Now(), "9:40", "11:30") || IsInTimeRange(time.Now(), "13:30", "14:55")
+			isOpeningTime := IsWeekday(time.Now()) && (IsInTimeRange(time.Now(), "09:40", "11:30") || IsInTimeRange(time.Now(), "13:00", "14:55"))
 
-			if (!IsWeekday(time.Now()) || !is_openning_time) && !ignore_close_time {
+			if !isOpeningTime && !ignoreCloseTime {
+				fmt.Println(IsInTimeRange(time.Now(), "09:40", "11:30"))
 				fmt.Println("Take a break")
-				time.Sleep(time.Millisecond * 5000)
+				time.Sleep(time.Millisecond * 10000)
 				continue
 			}
-			monitor := monitor{
-				speech: htgotts.Speech{
-					Folder:   "audio",
-					Language: voices.Chinese,
-					Handler:  &handlers.MPlayer{},
-				},
-			}
+			monitor := monitor{}
 			codes, err := getCodes()
 			if err != nil {
 				log.Errorf("get codes failed: %v", err)
 			}
 			for _, code := range codes {
-				stock_info, err := market.GetStockInfo(code)
+				stockInfo, err := market.GetStockInfo(code)
 				if err != nil {
 					log.Errorf("get stock info failed: %v", err)
 					continue
 				}
-				monitor.stock_info = stock_info
-				switch args[0] {
+				monitor.stockInfo = stockInfo
+				switch action {
 				case "up":
-					monitor.deviationChangePercent()
+					monitor.changePercentUp()
+				case "down":
+					monitor.changePercentDown()
 				}
 			}
 			time.Sleep(time.Millisecond * 100)
@@ -60,10 +57,10 @@ monitor up -i true -f /Users/Yy/Desktop/Table.txt -u 3 -d -5`,
 	},
 }
 
-var ignore_close_time bool
+var ignoreCloseTime bool
 var filename string
-var up_percent float64
-var down_percent float64
+var upPercent float64
+var downPercent float64
 
 func init() {
 	rootCmd.AddCommand(monitorCmd)
@@ -76,61 +73,72 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	monitorCmd.Flags().BoolVarP(&ignore_close_time, "ignore_close_time", "i", false, "If set to true it runs anytime or only in opening time")
+	monitorCmd.Flags().BoolVarP(&ignoreCloseTime, "ignore_close_time", "i", false, "If set to true it runs anytime or only in opening time")
 	monitorCmd.Flags().StringVarP(&filename, "filename", "f", "./code_list.txt", "Stock code list file")
-	monitorCmd.Flags().Float64VarP(&up_percent, "up_percent", "u", 3.0, "Up ChangePercent")
-	monitorCmd.Flags().Float64VarP(&down_percent, "down_percent", "d", -3.0, "Down ChangePercent")
+	monitorCmd.Flags().Float64VarP(&upPercent, "up_percent", "u", 3.0, "Up ChangePercent")
+	monitorCmd.Flags().Float64VarP(&downPercent, "down_percent", "d", -3.0, "Down ChangePercent")
 }
 
 type monitor struct {
-	stock_info *market.StockInfo
-	speech     htgotts.Speech
+	stockInfo *market.StockInfo
 }
-type spokeInfo struct {
-	SpokeTime    time.Time
-	SpokeMessage string
+type monitorStock struct {
+	spokeTime time.Time
+	stockInfo *market.StockInfo
 }
 
-var spokes = make(map[string]spokeInfo)
+var monitorStocks = make(map[string]monitorStock)
 
-func (bind *monitor) deviationChangePercent() {
+func (bind *monitor) changePercentUp() {
 	//if _, ok := stocks[code]; !ok {
 	//	stocks[code] = stock_info
 	//}
 	//stocks[code] = stock_info
 
-	name := Substring(bind.stock_info.Name, 0, 2)
+	name := Substring(bind.stockInfo.Name, 0, 2)
 	//c := ReverseString(name)
 	//notifyCode := "0." + c[0:3] + c[3:]
 	var msg string
-	if bind.stock_info.ChangePercent > up_percent {
+	if bind.stockInfo.ChangePercent > upPercent {
 		msg = name + " up"
-	} else if bind.stock_info.ChangePercent < down_percent {
-		msg = name + " down"
 	}
-	bind.speak(msg)
+	bind.notify(msg)
 }
 
-func (bind *monitor) speak(msg string) {
+func (bind *monitor) changePercentDown() {
+	name := Substring(bind.stockInfo.Name, 0, 2)
+	var msg string
+	if bind.stockInfo.ChangePercent < downPercent {
+		msg = name + " down"
+	}
+	bind.notify(msg)
+}
+
+func (bind *monitor) notify(msg string) {
 	if msg == "" {
 		return
 	}
-	if _, ok := spokes[bind.stock_info.Code]; ok {
-		if spokes[bind.stock_info.Code].SpokeTime.After(time.Now().Add(-5 * time.Minute)) {
+	if _, ok := monitorStocks[bind.stockInfo.Code]; ok {
+		//if monitorStocks[bind.stockInfo.Code].spokeTime.After(time.Now().Add(-10 * time.Minute)) {
+		//	return
+		//}
+		if math.Abs(monitorStocks[bind.stockInfo.Code].stockInfo.ChangePercent-bind.stockInfo.ChangePercent) < 2 {
 			return
 		}
 	}
-	fmt.Println(msg, bind.stock_info.ChangePercent)
-	log.Infof(msg+" %v", bind.stock_info.ChangePercent)
-	err := bind.speech.Speak(msg)
+	fmt.Println(msg, bind.stockInfo.ChangePercent)
+	log.Infof(msg+" %v", bind.stockInfo.ChangePercent)
+	//speak
+	cmd := exec.Command("python3", GetCurrentAbPathByCaller()+"/../lib/speak.py", msg)
+	_, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(err)
 		log.Errorf("Speak error: %v", err)
 
 	}
-	spokes[bind.stock_info.Code] = spokeInfo{
-		SpokeTime:    time.Now(),
-		SpokeMessage: msg,
+	monitorStocks[bind.stockInfo.Code] = monitorStock{
+		spokeTime: time.Now(),
+		stockInfo: bind.stockInfo,
 	}
 }
 
@@ -147,7 +155,7 @@ func getCodes() ([]string, error) {
 	//	}
 	//}()
 	//rows, err := f.GetRows("Sheet1")
-	CovertToUTF8(filename)
+	CovertToUTF8(filename) //nolint:errcheck
 	lines, err := ReadLines(filename)
 	if err != nil {
 		return nil, err

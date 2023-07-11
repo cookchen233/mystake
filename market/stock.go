@@ -26,7 +26,7 @@ type StockInfo struct {
 
 func GetStockInfo(code string) (*StockInfo, error) {
 	if code == "" || len(code) < 6 || !unicode.IsDigit(rune(code[0])) {
-		return nil, errors.Errorf("Invalid stock code: %s", code)
+		return nil, errors.Errorf("Invalid stock code: %v", code)
 	}
 	if strings.HasPrefix(code, "60") ||
 		strings.HasPrefix(code, "900") ||
@@ -36,7 +36,7 @@ func GetStockInfo(code string) (*StockInfo, error) {
 	} else {
 		code = "0." + code
 	}
-	var stock_info *StockInfo
+	var stockInfo *StockInfo
 	url := "https://push2.eastmoney.com/api/qt/stock/get"
 	client := resty.New()
 	//client.SetProxy("http://127.0.0.1:1080")
@@ -67,14 +67,14 @@ TryRequest:
 			log.Warnf("Timeout and try again")
 			goto TryRequest
 		}
-		log.Errorf("request error, url: %s, msg: %s, body:", url, err, resp.RawBody())
+		log.Errorf("request error, %v, url: %v, body:%v", err, url, resp.RawBody())
 		return nil, err
 	}
 	//stock_info := json.Unmarshal([]byte(resp.String()), &resp_data)
-	resp_data := struct {
+	respData := struct {
 		Data StockInfo
 	}{}
-	json.Unmarshal([]byte(resp.String()), &resp_data)
-	stock_info = &resp_data.Data
-	return stock_info, nil
+	json.Unmarshal([]byte(resp.String()), &respData)
+	stockInfo = &respData.Data
+	return stockInfo, nil
 }

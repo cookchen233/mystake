@@ -672,10 +672,9 @@ func IsWeekday(t time.Time) bool {
 
 // IsInTimeRange 判断给定时间是否在指定的时间范围内
 func IsInTimeRange(t time.Time, start, end string) bool {
-	layout := "15:04"
-	startTime, _ := time.Parse(layout, start)
-	endTime, _ := time.Parse(layout, end)
-
+	layout := "2006-01-02 15:04"
+	startTime, _ := time.ParseInLocation(layout, t.Format("2006-01-02 ")+start, time.Local)
+	endTime, _ := time.ParseInLocation(layout, t.Format("2006-01-02 ")+end, time.Local)
 	return t.After(startTime) && t.Before(endTime)
 }
 
@@ -699,4 +698,14 @@ func CovertToUTF8(filename string) error {
 		return err
 	}
 	return nil
+}
+
+// 获取当前执行文件绝对路径（go run）
+func GetCurrentAbPathByCaller() string {
+	var abPath string
+	_, filename, _, ok := runtime.Caller(0)
+	if ok {
+		abPath = path.Dir(filename)
+	}
+	return abPath
 }
