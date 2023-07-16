@@ -2,9 +2,8 @@ package market
 
 import (
 	"encoding/json"
-	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	. "mystake/lib"
 	"strconv"
 	"strings"
 	"time"
@@ -38,36 +37,18 @@ func GetStockInfo(code string) (*StockInfo, error) {
 	}
 	var stockInfo *StockInfo
 	url := "https://push2.eastmoney.com/api/qt/stock/get"
-	client := resty.New()
-	//client.SetProxy("http://127.0.0.1:1080")
-	//resp2, err := client.R().Get("https://ip.900cha.com/")
-	//fmt.Println(resp2.String())
-	var TryRequestTimes int64
-TryRequest:
-	TryRequestTimes++
-	resp, err := client.R().
-		SetQueryParams(map[string]string{
-			"fltt":   "2",
-			"invt":   "2",
-			"klt":    "1",
-			"secid":  code,
-			"fields": "f57,f58,f60,f43,f44,f45,f47,f170,f19,f20,f39,f40,f530",
-			"ut":     "b2884a393a59ad64002292a3e90d46a5",
-			//"cb": "jQuery183003743205523325188_1589197499471",
-			"_": strconv.FormatInt(time.Now().Unix(), 10),
-		}).
-		SetHeader("Accept", "application/json").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36").
-		//SetResult(resp_data).
-		//ForceContentType("application/json").
-		Get(url)
-
+	params := map[string]string{
+		"fltt":   "2",
+		"invt":   "2",
+		"klt":    "1",
+		"secid":  code,
+		"fields": "f57,f58,f60,f43,f44,f45,f47,f170,f19,f20,f39,f40,f530",
+		"ut":     "b2884a393a59ad64002292a3e90d46a5",
+		//"cb": "jQuery183003743205523325188_1589197499471",
+		"_": strconv.FormatInt(time.Now().Unix(), 10),
+	}
+	resp, err := RequestUrl(url, params, 3, "GET")
 	if err != nil {
-		if strings.Contains(err.Error(), "timeout") && TryRequestTimes < 3 {
-			log.Warnf("Timeout and try again")
-			goto TryRequest
-		}
-		log.Errorf("request error, %v, url: %v, body:%v", err, url, resp.RawBody())
 		return nil, err
 	}
 	//stock_info := json.Unmarshal([]byte(resp.String()), &resp_data)

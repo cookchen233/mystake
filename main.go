@@ -5,7 +5,9 @@ package main
 
 import (
 	"encoding/gob"
+	"fmt"
 	logrusStack "github.com/Gurpartap/logrus-stack"
+	"github.com/joho/godotenv"
 	"github.com/patrickmn/go-cache"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -18,6 +20,12 @@ import (
 var ca *cache.Cache
 
 func init() {
+	er := godotenv.Load("./pro.env")
+	if er != nil {
+		fmt.Println(er)
+		log.Error(er)
+	}
+	fmt.Println(os.Getenv("DIND_BOT_TOKEN"))
 	cache_file := "./cache.gob"
 	_, err := os.Lstat(cache_file)
 	var M map[string]cache.Item

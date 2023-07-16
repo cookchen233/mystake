@@ -4,12 +4,14 @@ Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"math"
 	. "mystake/lib"
 	"mystake/market"
+	"os"
 	"os/exec"
 	"regexp"
 	"time"
@@ -17,7 +19,7 @@ import (
 
 // monitorCmd represents the monitor command
 var monitorCmd = &cobra.Command{
-	Use:   "monitor up|down|notify",
+	Use:   "monitor up|down",
 	Short: "monitor the deviation from the stocks",
 	Long: `For example:
 monitor up -i true -f /Users/Yy/Desktop/Table.txt -u 3 -d -5`,
@@ -25,12 +27,11 @@ monitor up -i true -f /Users/Yy/Desktop/Table.txt -u 3 -d -5`,
 	Run: func(cmd *cobra.Command, args []string) {
 		action := args[0]
 		for {
-			isOpeningTime := IsWeekday(time.Now()) && (IsInTimeRange(time.Now(), "09:40", "11:30") || IsInTimeRange(time.Now(), "13:00", "14:55"))
+			isOpeningTime := IsWeekday(time.Now()) && (IsInTimeRange(time.Now(), "09:25", "11:30") || IsInTimeRange(time.Now(), "13:00", "15:00"))
 
 			if !isOpeningTime && !ignoreCloseTime {
-				fmt.Println(IsInTimeRange(time.Now(), "09:40", "11:30"))
 				fmt.Println("Take a break")
-				time.Sleep(time.Millisecond * 10000)
+				time.Sleep(time.Millisecond * 100000)
 				continue
 			}
 			monitor := monitor{}
@@ -90,26 +91,17 @@ type monitorStock struct {
 var monitorStocks = make(map[string]monitorStock)
 
 func (bind *monitor) changePercentUp() {
-	//if _, ok := stocks[code]; !ok {
-	//	stocks[code] = stock_info
-	//}
-	//stocks[code] = stock_info
-
-	name := Substring(bind.stockInfo.Name, 0, 2)
-	//c := ReverseString(name)
-	//notifyCode := "0." + c[0:3] + c[3:]
 	var msg string
 	if bind.stockInfo.ChangePercent > upPercent {
-		msg = name + " up"
+		msg = "up"
 	}
 	bind.notify(msg)
 }
 
 func (bind *monitor) changePercentDown() {
-	name := Substring(bind.stockInfo.Name, 0, 2)
 	var msg string
 	if bind.stockInfo.ChangePercent < downPercent {
-		msg = name + " down"
+		msg = "low"
 	}
 	bind.notify(msg)
 }
@@ -119,26 +111,53 @@ func (bind *monitor) notify(msg string) {
 		return
 	}
 	if _, ok := monitorStocks[bind.stockInfo.Code]; ok {
-		//if monitorStocks[bind.stockInfo.Code].spokeTime.After(time.Now().Add(-10 * time.Minute)) {
-		//	return
-		//}
-		if math.Abs(monitorStocks[bind.stockInfo.Code].stockInfo.ChangePercent-bind.stockInfo.ChangePercent) < 2 {
+		change := math.Abs(monitorStocks[bind.stockInfo.Code].stockInfo.ChangePercent - bind.stockInfo.ChangePercent)
+		if change < 2 && time.Now().Before(monitorStocks[bind.stockInfo.Code].spokeTime.Add(time.Hour*12)) {
 			return
 		}
 	}
-	fmt.Println(msg, bind.stockInfo.ChangePercent)
-	log.Infof(msg+" %v", bind.stockInfo.ChangePercent)
-	//speak
-	cmd := exec.Command("python3", GetCurrentAbPathByCaller()+"/../lib/speak.py", msg)
+	name := Substring(bind.stockInfo.Name, 0, 2)
+	rcode := ReverseString(bind.stockInfo.Code)
+	notifyCode := "0." + rcode[0:3] + rcode[3:]
+	fmt.Printf("%v %v %.1f\n", name, msg, bind.stockInfo.ChangePercent)
+	log.Infof("%v %v %.1f", name, msg, bind.stockInfo.ChangePercent)
+	audio := GetCurrentAudio()
+	if audio == "MacBook Air扬声器" {
+		//dingding
+		bind.ding(notifyCode + ", " + msg)
+	} else {
+		//speak
+		bind.speak(name + " " + msg)
+	}
+	monitorStocks[bind.stockInfo.Code] = monitorStock{
+		spokeTime: time.Now(),
+		stockInfo: bind.stockInfo,
+	}
+}
+
+func (bind *monitor) speak(msg string) {
+	cmd := exec.Command("python3", "/Users/Chen/go/bin/speak.py", msg)
 	_, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(err)
 		log.Errorf("Speak error: %v", err)
 
 	}
-	monitorStocks[bind.stockInfo.Code] = monitorStock{
-		spokeTime: time.Now(),
-		stockInfo: bind.stockInfo,
+}
+func (bind *monitor) ding(msg string) {
+	url := "https://oapi.dingtalk.com/robot/send?access_token=" + os.Getenv("DIND_BOT_TOKEN")
+	params := fmt.Sprintf(`{
+		"msgtype": "text",
+		"text":    {"content": "完成率: %v"},
+	}`, msg)
+	resp, _ := RequestUrl(url, params, 3, "POST")
+	var result struct {
+		errcode int64
+		errmsg  string
+	}
+	json.Unmarshal([]byte(resp.String()), &result)
+	if result.errcode != 0 {
+		log.Errorf("ding error, " + result.errmsg)
 	}
 }
 

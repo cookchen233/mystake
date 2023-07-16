@@ -4,6 +4,8 @@ go 1.19
 
 require (
 	github.com/Gurpartap/logrus-stack v0.0.0-20170710170904-89c00d8a28f4
+	github.com/dlclark/regexp2 v1.10.0
+	github.com/joho/godotenv v1.5.1
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1

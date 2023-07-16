@@ -6,3 +6,5 @@ composer.lock
 .svn
 .vscode
 node_modules
+Cache.gob
+pro.env

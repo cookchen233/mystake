@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"github.com/go-resty/resty/v2"
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/pkg/errors"
 	"github.com/rifflock/lfshook"
@@ -17,6 +19,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -708,4 +711,73 @@ func GetCurrentAbPathByCaller() string {
 		abPath = path.Dir(filename)
 	}
 	return abPath
+}
+func RequestUrl(url string, params interface{}, retryTimes int64, requestType string) (*resty.Response, error) {
+	client := resty.New()
+	//client.SetProxy("http://127.0.0.1:1080")
+	//resp2, err := client.R().Get("https://ip.900cha.com/")
+	//fmt.Println(resp2.String())
+	var TryRequestTimes int64
+TryRequest:
+	TryRequestTimes++
+	var resp *resty.Response
+	var err error
+	if strings.ToUpper(requestType) == "GET" {
+		resp, err = client.R().
+			SetQueryParams(params.(map[string]string)).
+			SetHeader("Accept", "application/json").
+			SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36").
+			//SetResult(resp_data).
+			//ForceContentType("application/json").
+			Get(url)
+	} else {
+		resp, err = client.R().
+			SetHeader("Content-Type", "application/json").
+			SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36").
+			//SetResult(resp_data).
+			//ForceContentType("application/json").
+			SetBody(params).
+			Post(url)
+	}
+	if err != nil {
+		if (strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "peer")) && TryRequestTimes < retryTimes {
+			log.Warnf("Connection error and try again")
+			goto TryRequest
+		}
+		log.Errorf("request error, %v, url: %v, body:%v", err, url, resp.RawBody())
+		return nil, err
+	}
+	return resp, nil
+}
+
+func IsConnectedBluetooth(name string) bool {
+	cmd := exec.Command("system_profiler", "SPBluetoothDataType")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(err)
+		log.Errorf("system_profiler error: %v", err)
+
+	}
+	return regexp.MustCompile(fmt.Sprintf(`(?s)Connected:\s+(%s):`, name)).MatchString(string(output)) &&
+		!regexp.MustCompile(fmt.Sprintf(`(?s)Not Connected:\s+(%s):`, name)).MatchString(string(output))
+}
+
+func GetCurrentAudio() string {
+	cmd := exec.Command("system_profiler", "SPAudioDataType", "-json")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(err)
+		log.Errorf("system_profiler error: %v", err)
+
+	}
+	var data map[string][]map[string][]map[string]string
+	json.Unmarshal(output, &data)
+	for _, item := range data["SPAudioDataType"][0]["_items"] {
+		if _, ok := item["coreaudio_default_audio_output_device"]; ok {
+			if item["coreaudio_default_audio_output_device"] == "spaudio_yes" {
+				return item["_name"]
+			}
+		}
+	}
+	return ""
 }
